@@ -158,6 +158,7 @@ def main() -> None:
         num_labels=NUM_CLASSES,
         id2label=CLASS_ID_TO_NAME,
         label2id=CLASS_NAME_TO_ID,
+        ignore_mismatched_sizes=True,
     )
     trainable_names = determine_trainable_params(model, args.regime)
     model.to(device)
