@@ -137,9 +137,11 @@ class MovedObjectDataset(Dataset):
         boxes_tensor = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4), dtype=torch.float32)
         labels_tensor = torch.tensor(labels, dtype=torch.int64) if labels else torch.zeros((0,), dtype=torch.int64)
 
+        class_labels = labels_tensor
         target = {
             "boxes": boxes_tensor,
-            "labels": labels_tensor,
+            "class_labels": class_labels,
+            "labels": class_labels.clone(),  # optional alias for downstream use
             "image_id": torch.tensor([hash(record.pair_id) & 0xFFFFFFFF], dtype=torch.int64),
             "area": (boxes_tensor[:, 2] - boxes_tensor[:, 0]) * (boxes_tensor[:, 3] - boxes_tensor[:, 1])
             if boxes
