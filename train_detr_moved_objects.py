@@ -3,7 +3,6 @@ import json
 import os
 import time
 from typing import Dict, List, Sequence
-
 import torch
 from torch.utils.data import DataLoader
 from transformers import DetrForObjectDetection
@@ -11,10 +10,13 @@ from transformers import DetrForObjectDetection
 from configs.detr_config import CLASS_ID_TO_NAME, CLASS_NAME_TO_ID, NUM_CLASSES
 from datasets.moved_object_dataset import build_datasets_from_metadata
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fine-tune DETR on VIRAT motion pairs (Option 2).")
-    parser.add_argument("--metadata-csv", type=str, default="cv_data_hw2/metadata/pairs.csv", help="Path to metadata CSV.")
+    default_metadata = os.path.join(SCRIPT_DIR, "cv_data_hw2", "metadata", "pairs.csv")
+    parser.add_argument("--metadata-csv", type=str, default=default_metadata, help="Path to metadata CSV.")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Directory to store checkpoints and logs.")
     parser.add_argument("--run-name", type=str, default="", help="Optional run name. Defaults to regime+timestamp.")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs.")

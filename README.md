@@ -37,11 +37,11 @@ python train_detr_moved_objects.py \
   --epochs 15 \
   --batch-size 2 \
   --learning-rate 5e-5 \
-  --metadata-csv cv_data_hw2/metadata/pairs.csv \
+  --metadata-csv $(pwd)/cv_data_hw2/metadata/pairs.csv \
   --output-dir outputs
 ```
 
-The script automatically splits the metadata 80/20, builds the pixel-diff dataset, logs losses, and saves `best_model.pt`, `latest_model.pt`, and `training_log.json` under `outputs/<run-name>/`.
+The `--metadata-csv` flag accepts any path; by default the script already resolves to the copy inside this repo using an absolute path derived from the script directory. Use `$(pwd)` (or your project root) if you run the command from elsewhere. The script automatically splits the metadata 80/20, builds the pixel-diff dataset, logs losses, and saves `best_model.pt`, `latest_model.pt`, and `training_log.json` under `outputs/<run-name>/`.
 
 ### Recommended commands
 
