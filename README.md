@@ -66,3 +66,18 @@ Feel free to adjust hyperparameters per experiment; the script records them in t
 - `outputs/<run-name>/latest_model.pt`: last-epoch weights.
 - `outputs/<run-name>/training_log.json`: regime, hyperparameters, dataset sizes, and epoch-wise losses—use this for SLURM logs/report figures.
 
+## Evaluation & Visuals
+
+After training a regime, run the evaluation helper to compute precision/recall/F1 (IoU ≥ 0.5) on the held-out test split and produce qualitative figures:
+
+```bash
+python evaluate_detr_moved_objects.py \
+  --checkpoint outputs/full_finetune/best_model.pt \
+  --regime full \
+  --metadata-csv $(pwd)/cv_data_hw2/metadata/pairs.csv \
+  --device cuda \
+  --max-plots 12
+```
+
+This script writes `outputs/<regime>_metrics.json` with per-class TP/FP/FN, precision, recall, and F1; plots showing frame1 (with GT boxes), frame2, and the pixel-diff image with predictions are saved under `visuals/<regime>/sample_XXXX.png`. Repeat for each trained regime to gather the tables and screenshots required for the report.
+

@@ -51,7 +51,7 @@ def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float
     for batch in dataloader:
         pixel_values = batch["pixel_values"].to(device)
         outputs = model(pixel_values=pixel_values)
-        probas = outputs.logits.softmax(-1)[..., :-1]
+        probas = outputs.logits.softmax(-1)[..., :-1].cpu()
         keep = probas.max(-1).values > 0.5
         pred_boxes = outputs.pred_boxes.cpu()
         labels = batch["labels"]
