@@ -60,11 +60,18 @@ def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float
         for k in range(pixel_values.size(0)):
             pred_scores = probas[k][keep[k]]
             pred_classes = pred_scores.argmax(-1).cpu()
-            pred_boxes_abs = pred_boxes[k][keep[k]]
-
+            pred_boxes_norm = pred_boxes[k][keep[k]]
             target = labels[k]
             gt_boxes = target["boxes"]
             gt_classes = target["class_labels"]
+            height, width = target["size"].tolist()
+
+            pred_boxes_abs = torch.zeros_like(pred_boxes_norm)
+            pred_boxes_abs[:, 0] = (pred_boxes_norm[:, 0] - pred_boxes_norm[:, 2] / 2.0) * width
+            pred_boxes_abs[:, 1] = (pred_boxes_norm[:, 1] - pred_boxes_norm[:, 3] / 2.0) * height
+            pred_boxes_abs[:, 2] = (pred_boxes_norm[:, 0] + pred_boxes_norm[:, 2] / 2.0) * width
+            pred_boxes_abs[:, 3] = (pred_boxes_norm[:, 1] + pred_boxes_norm[:, 3] / 2.0) * height
+
 
             if len(gt_boxes) == 0 and len(pred_boxes_abs) == 0:
                 continue
