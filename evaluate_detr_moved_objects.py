@@ -168,6 +168,36 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
     return metrics
 
 
+def summarize_and_print_metrics(metrics: Dict[str, Dict[str, float]]) -> None:
+    # per-class
+    for cls_name, m in metrics.items():
+        print(
+            f"{cls_name}: f1={m['f1']:.4f} "
+            f"prec={m['precision']:.4f} rec={m['recall']:.4f} "
+            f"(tp={m['tp']}, fp={m['fp']}, fn={m['fn']})"
+        )
+
+    # macro
+    if metrics:
+        f1s = [m["f1"] for m in metrics.values()]
+        macro_f1 = sum(f1s) / len(f1s)
+    else:
+        macro_f1 = 0.0
+
+    # micro
+    tp_total = sum(m["tp"] for m in metrics.values())
+    fp_total = sum(m["fp"] for m in metrics.values())
+    fn_total = sum(m["fn"] for m in metrics.values())
+    micro_prec = tp_total / (tp_total + fp_total) if (tp_total + fp_total) > 0 else 0.0
+    micro_rec = tp_total / (tp_total + fn_total) if (tp_total + fn_total) > 0 else 0.0
+    micro_f1 = 2 * micro_prec * micro_rec / (micro_prec + micro_rec) if (micro_prec + micro_rec) > 0 else 0.0
+
+    print(f"Macro F1: {macro_f1:.4f}")
+    print(
+        f"Micro  F1: {micro_f1:.4f} (prec={micro_prec:.4f}, rec={micro_rec:.4f}, tp={tp_total}, fp={fp_total}, fn={fn_total})"
+    )
+
+
 def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, max_plots: int) -> None:
     os.makedirs(save_dir, exist_ok=True)
     indices = list(range(min(max_plots, len(dataset))))
@@ -267,6 +297,7 @@ def main() -> None:
 
     model = load_model(args.checkpoint, device)
     metrics = evaluate(model, test_loader, device, args.iou_threshold, args.print_examples)
+    summarize_and_print_metrics(metrics)
 
     os.makedirs(args.output_dir, exist_ok=True)
     metrics_path = os.path.join(args.output_dir, f"{args.regime}_metrics.json")
