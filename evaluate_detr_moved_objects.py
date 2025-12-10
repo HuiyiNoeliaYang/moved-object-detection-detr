@@ -15,6 +15,23 @@ from train_detr_moved_objects import collate_fn
 from transformers import DetrForObjectDetection
 
 
+def _cxcywh_to_xyxy_abs(boxes_norm: torch.Tensor, width: float, height: float) -> torch.Tensor:
+    """
+    Convert normalized cx,cy,w,h (all in [0,1]) to absolute xyxy in pixels.
+    """
+    if boxes_norm.numel() == 0:
+        return torch.zeros((0, 4), dtype=torch.float32)
+    cx = boxes_norm[:, 0] * width
+    cy = boxes_norm[:, 1] * height
+    w = boxes_norm[:, 2] * width
+    h = boxes_norm[:, 3] * height
+    x_min = cx - w / 2.0
+    y_min = cy - h / 2.0
+    x_max = cx + w / 2.0
+    y_max = cy + h / 2.0
+    return torch.stack([x_min, y_min, x_max, y_max], dim=-1)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate DETR fine-tuned models on VIRAT motion pairs.")
     parser.add_argument("--metadata-csv", type=str, default=os.path.join("cv_data_hw2", "metadata", "pairs.csv"))
@@ -71,7 +88,7 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
             pred_conf = pred_scores.max(-1).values.cpu()
             pred_boxes_norm = pred_boxes[k][keep[k]]
             target = labels[k]
-            gt_boxes = target["boxes"]
+            gt_boxes_norm = target["boxes"]
             gt_classes = target["class_labels"]
             height, width = target["size"].tolist()
 
@@ -80,6 +97,8 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
             pred_boxes_abs[:, 1] = (pred_boxes_norm[:, 1] - pred_boxes_norm[:, 3] / 2.0) * height
             pred_boxes_abs[:, 2] = (pred_boxes_norm[:, 0] + pred_boxes_norm[:, 2] / 2.0) * width
             pred_boxes_abs[:, 3] = (pred_boxes_norm[:, 1] + pred_boxes_norm[:, 3] / 2.0) * height
+
+            gt_boxes_abs = _cxcywh_to_xyxy_abs(gt_boxes_norm, width, height)
 
             if examples_printed < print_examples:
                 print(f"[example {examples_printed + 1}] sample_idx={global_sample_idx}")
@@ -92,18 +111,18 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
                         box_list = [round(float(x), 1) for x in box.tolist()]
                         print(f"    {cls_name}, {conf:.3f}, {box_list}")
                 print("  gts (class, [xmin, ymin, xmax, ymax]):")
-                if len(gt_boxes) == 0:
+                if len(gt_boxes_abs) == 0:
                     print("    (none)")
                 else:
-                    for box, cls in zip(gt_boxes, gt_classes):
+                    for box, cls in zip(gt_boxes_abs, gt_classes):
                         cls_name = CLASS_ID_TO_NAME.get(int(cls), str(int(cls)))
                         box_list = [round(float(x), 1) for x in box.tolist()]
                         print(f"    {cls_name}, {box_list}")
                 examples_printed += 1
 
-            if len(gt_boxes) == 0 and len(pred_boxes_abs) == 0:
+            if len(gt_boxes_abs) == 0 and len(pred_boxes_abs) == 0:
                 continue
-            if len(gt_boxes) == 0:
+            if len(gt_boxes_abs) == 0:
                 for cls in pred_classes.tolist():
                     stats[cls]["fp"] += 1
                 continue
@@ -112,7 +131,7 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
                     stats[cls]["fn"] += 1
                 continue
 
-            ious = box_iou(pred_boxes_abs, gt_boxes)
+            ious = box_iou(pred_boxes_abs, gt_boxes_abs)
             gt_matched = set()
             pred_matched = set()
             for pred_idx in range(len(pred_boxes_abs)):
@@ -125,7 +144,7 @@ def evaluate(model, dataloader, device, iou_threshold: float, print_examples: in
                     pred_matched.add(pred_idx)
                 else:
                     stats[cls_pred]["fp"] += 1
-            for gt_idx in range(len(gt_boxes)):
+            for gt_idx in range(len(gt_boxes_abs)):
                 if gt_idx not in gt_matched:
                     cls_gt = int(gt_classes[gt_idx])
                     stats[cls_gt]["fn"] += 1
@@ -159,12 +178,14 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
         outputs = model(pixel_values=diff_tensor)
         probas = outputs.logits.softmax(-1)[..., :-1][0]
         keep = probas.max(-1).values > 0.5
-        boxes = outputs.pred_boxes[0][keep].cpu()
+        boxes_norm = outputs.pred_boxes[0][keep].cpu()
         classes = probas.argmax(-1)[keep].cpu()
 
         img1 = Image.open(record.img1_path).convert("RGB")
         img2 = Image.open(record.img2_path).convert("RGB")
         diff_img = torch.clamp(sample["pixel_values"], 0, 1).permute(1, 2, 0).numpy()
+        height, width = sample["labels"]["size"].tolist()
+        boxes = _cxcywh_to_xyxy_abs(boxes_norm, width, height)
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
         axes[0].imshow(img1)
@@ -200,7 +221,8 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
 
         gt_ax = axes[0]
         target = sample["labels"]
-        for box, cls in zip(target["boxes"], target["class_labels"]):
+        gt_boxes_abs = _cxcywh_to_xyxy_abs(target["boxes"], width, height)
+        for box, cls in zip(gt_boxes_abs, target["class_labels"]):
             xmin, ymin, xmax, ymax = box.tolist()
             rect = plt.Rectangle(
                 (xmin, ymin),
