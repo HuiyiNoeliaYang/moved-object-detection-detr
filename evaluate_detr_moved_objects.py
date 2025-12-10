@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--iou-threshold", type=float, default=0.5)
     parser.add_argument("--max-plots", type=int, default=10, help="Number of qualitative figures to generate.")
+    parser.add_argument(
+        "--plot-conf-thresh",
+        type=float,
+        default=0.1,
+        help="Confidence threshold for showing predicted boxes in qualitative plots.",
+    )
     parser.add_argument("--output-dir", type=str, default="outputs")
     parser.add_argument("--visuals-dir", type=str, default="visuals")
     parser.add_argument(
@@ -198,7 +204,7 @@ def summarize_and_print_metrics(metrics: Dict[str, Dict[str, float]]) -> None:
     )
 
 
-def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, max_plots: int) -> None:
+def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, max_plots: int, conf_thresh: float) -> None:
     os.makedirs(save_dir, exist_ok=True)
     indices = list(range(min(max_plots, len(dataset))))
     for idx in indices:
@@ -207,7 +213,7 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
         diff_tensor = sample["pixel_values"].unsqueeze(0).to(device)
         outputs = model(pixel_values=diff_tensor)
         probas = outputs.logits.softmax(-1)[..., :-1][0]
-        keep = probas.max(-1).values > 0.5
+        keep = probas.max(-1).values > conf_thresh
         boxes_norm = outputs.pred_boxes[0][keep].cpu()
         classes = probas.argmax(-1)[keep].cpu()
 
@@ -306,7 +312,7 @@ def main() -> None:
     print(f"Saved metrics to {metrics_path}")
 
     visuals_path = os.path.join(args.visuals_dir, args.regime)
-    plot_qualitative(model, test_dataset, device, visuals_path, args.max_plots)
+    plot_qualitative(model, test_dataset, device, visuals_path, args.max_plots, args.plot_conf_thresh)
     print(f"Saved qualitative figures to {visuals_path}")
 
 
