@@ -4,7 +4,7 @@ import os
 import time
 from typing import Dict, List, Sequence
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from transformers import DetrForObjectDetection
 
 from configs.detr_config import CLASS_ID_TO_NAME, CLASS_NAME_TO_ID, NUM_CLASSES
@@ -40,6 +40,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--train-ratio", type=float, default=0.8, help="Train/test split ratio from metadata.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for dataset split and torch.")
+    parser.add_argument(
+        "--train-limit",
+        type=int,
+        default=0,
+        help="If >0, use only this many samples from the training set (for overfit tests).",
+    )
+    parser.add_argument(
+        "--val-limit",
+        type=int,
+        default=0,
+        help="If >0, use only this many samples from the validation set.",
+    )
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return parser.parse_args()
 
@@ -137,6 +149,11 @@ def main() -> None:
         target_long_side=args.target_long_side,
         only_with_moved_objects=args.train_only_moved,
     )
+
+    if args.train_limit and args.train_limit > 0:
+        train_ds = Subset(train_ds, range(min(args.train_limit, len(train_ds))))
+    if args.val_limit and args.val_limit > 0:
+        val_ds = Subset(val_ds, range(min(args.val_limit, len(val_ds))))
 
     train_loader = DataLoader(
         train_ds,
