@@ -131,9 +131,19 @@ class MovedObjectDataset(Dataset):
                     y_max = max(0.0, min(height, y + h))
                     if x_max <= x_min or y_max <= y_min:
                         continue
-                    w_box = x_max - x_min
-                    h_box = y_max - y_min
-                    boxes.append([x_min, y_min, w_box, h_box])
+
+                    # Convert to normalized center-format (cx, cy, w, h) in [0,1]
+                    box_w = x_max - x_min
+                    box_h = y_max - y_min
+                    x_c = (x_min + x_max) / 2.0
+                    y_c = (y_min + y_max) / 2.0
+
+                    x_c /= width
+                    y_c /= height
+                    box_w /= width
+                    box_h /= height
+
+                    boxes.append([x_c, y_c, box_w, box_h])
                     labels.append(int(cls))
 
         boxes_tensor = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4), dtype=torch.float32)

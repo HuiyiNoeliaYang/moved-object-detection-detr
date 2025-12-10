@@ -75,7 +75,7 @@ def move_targets_to_device(labels: List[Dict[str, torch.Tensor]], device: torch.
 
 
 @torch.no_grad()
-def print_one_example(model, dataloader, device, score_thresh: float = 0.1) -> None:
+def print_one_example(model, dataloader, device, score_thresh: float = 0) -> None:
     model.eval()
     for batch in dataloader:
         pixel_values = batch["pixel_values"].to(device)
