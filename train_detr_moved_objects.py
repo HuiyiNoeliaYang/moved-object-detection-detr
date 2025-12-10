@@ -331,12 +331,7 @@ def main() -> None:
         val_loss = evaluate(model, val_loader, device)
         val_f1_metrics = evaluate_f1(model, val_loader, device)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-        print(
-            f"[{run_name}] Epoch {epoch}/{args.epochs} "
-            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"val_f1={val_f1_metrics['f1']:.4f} "
-            f"(prec={val_f1_metrics['precision']:.4f}, rec={val_f1_metrics['recall']:.4f})"
-        )
+        print(f"[{run_name}] Epoch {epoch}/{args.epochs} train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
         if args.print_example:
             print_one_example(model, val_loader, device)
 
