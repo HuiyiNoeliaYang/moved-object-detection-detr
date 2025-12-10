@@ -368,6 +368,8 @@ def main() -> None:
                 indent=2,
             )
 
+    print(f"Checkpoints saved under: {run_dir}")
+
 
 if __name__ == "__main__":
     main()

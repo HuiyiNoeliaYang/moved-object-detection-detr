@@ -198,8 +198,8 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
         for ax in axes:
             ax.axis("off")
 
-        # Draw predictions on diff plot
-        ax_pred = axes[2]
+        # Draw predictions and GT on diff plot
+        ax_diff = axes[2]
         for box, cls in zip(boxes, classes):
             xmin, ymin, xmax, ymax = box.tolist()
             rect = plt.Rectangle(
@@ -210,8 +210,8 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
                 edgecolor="lime",
                 linewidth=2,
             )
-            ax_pred.add_patch(rect)
-            ax_pred.text(
+            ax_diff.add_patch(rect)
+            ax_diff.text(
                 xmin,
                 ymin,
                 CLASS_ID_TO_NAME.get(int(cls), str(int(cls))),
@@ -219,7 +219,6 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
                 bbox={"facecolor": "lime", "alpha": 0.5},
             )
 
-        gt_ax = axes[0]
         target = sample["labels"]
         gt_boxes_abs = _cxcywh_to_xyxy_abs(target["boxes"], width, height)
         for box, cls in zip(gt_boxes_abs, target["class_labels"]):
@@ -232,8 +231,8 @@ def plot_qualitative(model, dataset: MovedObjectDataset, device, save_dir: str, 
                 edgecolor="red",
                 linewidth=2,
             )
-            gt_ax.add_patch(rect)
-            gt_ax.text(
+            ax_diff.add_patch(rect)
+            ax_diff.text(
                 xmin,
                 ymin,
                 CLASS_ID_TO_NAME.get(int(cls), str(int(cls))),
