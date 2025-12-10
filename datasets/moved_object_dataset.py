@@ -131,7 +131,9 @@ class MovedObjectDataset(Dataset):
                     y_max = max(0.0, min(height, y + h))
                     if x_max <= x_min or y_max <= y_min:
                         continue
-                    boxes.append([x_min, y_min, x_max, y_max])
+                    w_box = x_max - x_min
+                    h_box = y_max - y_min
+                    boxes.append([x_min, y_min, w_box, h_box])
                     labels.append(int(cls))
 
         boxes_tensor = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4), dtype=torch.float32)
@@ -143,9 +145,7 @@ class MovedObjectDataset(Dataset):
             "class_labels": class_labels,
             "labels": class_labels.clone(),  # optional alias for downstream use
             "image_id": torch.tensor([hash(record.pair_id) & 0xFFFFFFFF], dtype=torch.int64),
-            "area": (boxes_tensor[:, 2] - boxes_tensor[:, 0]) * (boxes_tensor[:, 3] - boxes_tensor[:, 1])
-            if boxes
-            else torch.zeros((0,), dtype=torch.float32),
+            "area": boxes_tensor[:, 2] * boxes_tensor[:, 3] if boxes else torch.zeros((0,), dtype=torch.float32),
             "iscrowd": torch.zeros((boxes_tensor.shape[0],), dtype=torch.int64),
             "orig_size": torch.tensor([height, width], dtype=torch.int64),
             "size": torch.tensor([height, width], dtype=torch.int64),
