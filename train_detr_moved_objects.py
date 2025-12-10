@@ -58,6 +58,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="After each epoch, print one prediction vs ground truth from the val set.",
     )
+    parser.add_argument(
+        "--check-labels",
+        action="store_true",
+        help="Print class mapping and unique GT labels from a sample batch, then exit.",
+    )
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return parser.parse_args()
 
@@ -215,6 +220,15 @@ def determine_trainable_params(model: DetrForObjectDetection, regime: str) -> Li
     return [name for name, p in model.named_parameters() if p.requires_grad]
 
 
+def print_label_check(sample_batch: Dict[str, torch.Tensor]) -> None:
+    print("id2label:", CLASS_ID_TO_NAME)
+    print("label2id:", CLASS_NAME_TO_ID)
+    labels = sample_batch["labels"]
+    for idx, tgt in enumerate(labels):
+        uniq = torch.unique(tgt["class_labels"])
+        print(f"sample {idx} unique labels:", uniq.tolist())
+
+
 def train_one_epoch(model, dataloader, optimizer, device) -> float:
     model.train()
     total_loss = 0.0
@@ -280,6 +294,14 @@ def main() -> None:
         num_workers=args.num_workers,
         collate_fn=collate_fn,
     )
+
+    if args.check_labels:
+        try:
+            sample_batch = next(iter(train_loader))
+            print_label_check(sample_batch)
+        except StopIteration:
+            print("Train loader is empty; cannot check labels.")
+        return
 
     model = DetrForObjectDetection.from_pretrained(
         "facebook/detr-resnet-50",
