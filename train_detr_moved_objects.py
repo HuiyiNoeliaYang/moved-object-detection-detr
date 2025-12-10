@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="If >0, use only this many samples from the validation set.",
     )
+    parser.add_argument(
+        "--print-example",
+        action="store_true",
+        help="After each epoch, print one prediction vs ground truth from the val set.",
+    )
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return parser.parse_args()
 
@@ -67,6 +72,53 @@ def move_targets_to_device(labels: List[Dict[str, torch.Tensor]], device: torch.
     for target in labels:
         moved.append({k: v.to(device) for k, v in target.items()})
     return moved
+
+
+@torch.no_grad()
+def print_one_example(model, dataloader, device, score_thresh: float = 0.5) -> None:
+    model.eval()
+    for batch in dataloader:
+        pixel_values = batch["pixel_values"].to(device)
+        labels = batch["labels"]
+        outputs = model(pixel_values=pixel_values)
+        probas = outputs.logits.softmax(-1)[..., :-1].cpu()
+        keep = probas.max(-1).values > score_thresh
+        pred_boxes = outputs.pred_boxes.cpu()
+
+        k = 0
+        pred_scores = probas[k][keep[k]]
+        pred_classes = pred_scores.argmax(-1).cpu()
+        pred_conf = pred_scores.max(-1).values.cpu()
+        pred_boxes_norm = pred_boxes[k][keep[k]]
+        target = labels[k]
+        gt_boxes = target["boxes"]
+        gt_classes = target["class_labels"]
+        height, width = target["size"].tolist()
+
+        pred_boxes_abs = torch.zeros_like(pred_boxes_norm)
+        pred_boxes_abs[:, 0] = (pred_boxes_norm[:, 0] - pred_boxes_norm[:, 2] / 2.0) * width
+        pred_boxes_abs[:, 1] = (pred_boxes_norm[:, 1] - pred_boxes_norm[:, 3] / 2.0) * height
+        pred_boxes_abs[:, 2] = (pred_boxes_norm[:, 0] + pred_boxes_norm[:, 2] / 2.0) * width
+        pred_boxes_abs[:, 3] = (pred_boxes_norm[:, 1] + pred_boxes_norm[:, 3] / 2.0) * height
+
+        print("[example] preds (class, conf, [xmin, ymin, xmax, ymax]):")
+        if len(pred_boxes_abs) == 0:
+            print("  (none)")
+        else:
+            for box, cls, conf in zip(pred_boxes_abs, pred_classes, pred_conf):
+                cls_name = CLASS_ID_TO_NAME.get(int(cls), str(int(cls)))
+                box_list = [round(float(x), 1) for x in box.tolist()]
+                print(f"  {cls_name}, {conf:.3f}, {box_list}")
+
+        print("  gts (class, [xmin, ymin, xmax, ymax]):")
+        if len(gt_boxes) == 0:
+            print("  (none)")
+        else:
+            for box, cls in zip(gt_boxes, gt_classes):
+                cls_name = CLASS_ID_TO_NAME.get(int(cls), str(int(cls)))
+                box_list = [round(float(x), 1) for x in box.tolist()]
+                print(f"  {cls_name}, {box_list}")
+        break
 
 
 def determine_trainable_params(model: DetrForObjectDetection, regime: str) -> List[str]:
@@ -198,6 +250,8 @@ def main() -> None:
         val_loss = evaluate(model, val_loader, device)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
         print(f"[{run_name}] Epoch {epoch}/{args.epochs} train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
+        if args.print_example:
+            print_one_example(model, val_loader, device)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss

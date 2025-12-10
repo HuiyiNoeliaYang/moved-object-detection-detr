@@ -27,6 +27,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-plots", type=int, default=10, help="Number of qualitative figures to generate.")
     parser.add_argument("--output-dir", type=str, default="outputs")
     parser.add_argument("--visuals-dir", type=str, default="visuals")
+    parser.add_argument(
+        "--print-examples",
+        type=int,
+        default=0,
+        help="If >0, print predictions and ground truth for this many samples.",
+    )
     return parser.parse_args()
 
 
@@ -46,8 +52,10 @@ def load_model(checkpoint_path: str, device: torch.device) -> DetrForObjectDetec
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float]:
+def evaluate(model, dataloader, device, iou_threshold: float, print_examples: int = 0) -> Dict[str, float]:
     stats = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
+    examples_printed = 0
+    global_sample_idx = 0
     for batch in dataloader:
         pixel_values = batch["pixel_values"].to(device)
         outputs = model(pixel_values=pixel_values)
@@ -60,6 +68,7 @@ def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float
         for k in range(pixel_values.size(0)):
             pred_scores = probas[k][keep[k]]
             pred_classes = pred_scores.argmax(-1).cpu()
+            pred_conf = pred_scores.max(-1).values.cpu()
             pred_boxes_norm = pred_boxes[k][keep[k]]
             target = labels[k]
             gt_boxes = target["boxes"]
@@ -72,6 +81,25 @@ def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float
             pred_boxes_abs[:, 2] = (pred_boxes_norm[:, 0] + pred_boxes_norm[:, 2] / 2.0) * width
             pred_boxes_abs[:, 3] = (pred_boxes_norm[:, 1] + pred_boxes_norm[:, 3] / 2.0) * height
 
+            if examples_printed < print_examples:
+                print(f"[example {examples_printed + 1}] sample_idx={global_sample_idx}")
+                print("  preds (class, conf, [xmin, ymin, xmax, ymax]):")
+                if len(pred_boxes_abs) == 0:
+                    print("    (none)")
+                else:
+                    for box, cls, conf in zip(pred_boxes_abs, pred_classes, pred_conf):
+                        cls_name = CLASS_ID_TO_NAME.get(int(cls), str(int(cls)))
+                        box_list = [round(float(x), 1) for x in box.tolist()]
+                        print(f"    {cls_name}, {conf:.3f}, {box_list}")
+                print("  gts (class, [xmin, ymin, xmax, ymax]):")
+                if len(gt_boxes) == 0:
+                    print("    (none)")
+                else:
+                    for box, cls in zip(gt_boxes, gt_classes):
+                        cls_name = CLASS_ID_TO_NAME.get(int(cls), str(int(cls)))
+                        box_list = [round(float(x), 1) for x in box.tolist()]
+                        print(f"    {cls_name}, {box_list}")
+                examples_printed += 1
 
             if len(gt_boxes) == 0 and len(pred_boxes_abs) == 0:
                 continue
@@ -102,6 +130,7 @@ def evaluate(model, dataloader, device, iou_threshold: float) -> Dict[str, float
                     cls_gt = int(gt_classes[gt_idx])
                     stats[cls_gt]["fn"] += 1
         batch_idx += 1
+        global_sample_idx += pixel_values.size(0)
 
     metrics = {}
     for cls_id, counts in stats.items():
@@ -216,7 +245,7 @@ def main() -> None:
     )
 
     model = load_model(args.checkpoint, device)
-    metrics = evaluate(model, test_loader, device, args.iou_threshold)
+    metrics = evaluate(model, test_loader, device, args.iou_threshold, args.print_examples)
 
     os.makedirs(args.output_dir, exist_ok=True)
     metrics_path = os.path.join(args.output_dir, f"{args.regime}_metrics.json")
