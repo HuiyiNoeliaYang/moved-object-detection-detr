@@ -5,6 +5,7 @@ import time
 from typing import Dict, List, Sequence
 import torch
 from torch.utils.data import DataLoader, Subset
+from torchvision.ops import box_iou
 from transformers import DetrForObjectDetection
 
 from configs.detr_config import CLASS_ID_TO_NAME, CLASS_NAME_TO_ID, NUM_CLASSES
@@ -72,6 +73,64 @@ def move_targets_to_device(labels: List[Dict[str, torch.Tensor]], device: torch.
     for target in labels:
         moved.append({k: v.to(device) for k, v in target.items()})
     return moved
+
+
+@torch.no_grad()
+def evaluate_f1(model, dataloader, device, iou_threshold: float = 0.5, conf_threshold: float = 0.5) -> Dict[str, float]:
+    model.eval()
+    tp = fp = fn = 0
+    for batch in dataloader:
+        pixel_values = batch["pixel_values"].to(device)
+        outputs = model(pixel_values=pixel_values)
+        probas = outputs.logits.softmax(-1)[..., :-1].cpu()
+        keep = probas.max(-1).values > conf_threshold
+        pred_boxes = outputs.pred_boxes.cpu()
+        labels = batch["labels"]
+
+        for k in range(pixel_values.size(0)):
+            pred_scores = probas[k][keep[k]]
+            pred_classes = pred_scores.argmax(-1).cpu()
+            pred_boxes_norm = pred_boxes[k][keep[k]]
+            target = labels[k]
+            gt_boxes = target["boxes"]
+            gt_classes = target["class_labels"]
+            height, width = target["size"].tolist()
+
+            # Convert normalized cxcywh -> xyxy in pixels
+            pred_boxes_abs = torch.zeros_like(pred_boxes_norm)
+            pred_boxes_abs[:, 0] = (pred_boxes_norm[:, 0] - pred_boxes_norm[:, 2] / 2.0) * width
+            pred_boxes_abs[:, 1] = (pred_boxes_norm[:, 1] - pred_boxes_norm[:, 3] / 2.0) * height
+            pred_boxes_abs[:, 2] = (pred_boxes_norm[:, 0] + pred_boxes_norm[:, 2] / 2.0) * width
+            pred_boxes_abs[:, 3] = (pred_boxes_norm[:, 1] + pred_boxes_norm[:, 3] / 2.0) * height
+
+            if len(gt_boxes) == 0 and len(pred_boxes_abs) == 0:
+                continue
+            if len(gt_boxes) == 0:
+                fp += len(pred_boxes_abs)
+                continue
+            if len(pred_boxes_abs) == 0:
+                fn += len(gt_boxes)
+                continue
+
+            ious = box_iou(pred_boxes_abs, gt_boxes)
+            gt_matched = set()
+            for pred_idx in range(len(pred_boxes_abs)):
+                max_iou, gt_idx = torch.max(ious[pred_idx], dim=0)
+                cls_pred = int(pred_classes[pred_idx])
+                cls_gt = int(gt_classes[gt_idx])
+                if max_iou >= iou_threshold and cls_pred == cls_gt and gt_idx.item() not in gt_matched:
+                    tp += 1
+                    gt_matched.add(gt_idx.item())
+                else:
+                    fp += 1
+            for gt_idx in range(len(gt_boxes)):
+                if gt_idx not in gt_matched:
+                    fn += 1
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1}
 
 
 @torch.no_grad()
@@ -248,8 +307,14 @@ def main() -> None:
     for epoch in range(1, args.epochs + 1):
         train_loss = train_one_epoch(model, train_loader, optimizer, device)
         val_loss = evaluate(model, val_loader, device)
+        val_f1_metrics = evaluate_f1(model, val_loader, device)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-        print(f"[{run_name}] Epoch {epoch}/{args.epochs} train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
+        print(
+            f"[{run_name}] Epoch {epoch}/{args.epochs} "
+            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+            f"val_f1={val_f1_metrics['f1']:.4f} "
+            f"(prec={val_f1_metrics['precision']:.4f}, rec={val_f1_metrics['recall']:.4f})"
+        )
         if args.print_example:
             print_one_example(model, val_loader, device)
 
