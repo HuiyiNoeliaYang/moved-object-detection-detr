@@ -1,6 +1,14 @@
-# DETR Moved-Object Fine-Tuning
+# DETR Moved-Object Detection
 
-This repo implements Assignment 3 (Option 2) for the VIRAT frame-pair dataset using pixel-difference inputs and DETR.
+A deep learning system for detecting and localizing moved objects between consecutive video frames using Detection Transformer (DETR) architecture.
+
+## Project Description
+
+This project implements an intelligent motion detection system that identifies objects that have moved between consecutive video frames. Unlike traditional object detection that simply identifies what objects are present, this system specifically focuses on detecting *which* objects have changed position between two frames.
+
+The approach leverages the powerful DETR (Detection Transformer) architecture, fine-tuned on the VIRAT video dataset. By computing pixel-wise differences between frame pairs and feeding them into a modified DETR model, the system learns to localize regions where objects have moved. This has practical applications in surveillance, anomaly detection, traffic monitoring, and automated video analysis.
+
+The project supports multiple fine-tuning strategies—from full model fine-tuning to selective training of specific components (backbone, transformer, or detection head)—allowing for flexible experimentation with different training regimes and computational budgets.
 
 ## Environment Setup
 
